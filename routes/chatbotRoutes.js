@@ -2,9 +2,16 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Chatbot from '../models/Chatbot.js';
+import { setCorsHeaders } from '../utils/cors.js';
 
 dotenv.config();
 const router = express.Router();
+
+// Helper to send response with CORS headers
+const sendResponse = (req, res, statusCode, data) => {
+  setCorsHeaders(req, res);
+  return res.status(statusCode).json(data);
+};
 
 // Helper to ensure connection before database operations
 const ensureDBConnection = async () => {
@@ -50,9 +57,14 @@ router.get('/', async (req, res) => {
     await ensureDBConnection();
     
     const chatbots = await Chatbot.find().sort({ createdAt: -1 });
+    setCorsHeaders(req, res);
     res.json(chatbots);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching chatbots:', error);
+    sendResponse(req, res, 500, { 
+      error: error.message || 'Failed to fetch chatbots',
+      code: 'FETCH_ERROR'
+    });
   }
 });
 
@@ -81,6 +93,7 @@ router.get('/:id', async (req, res) => {
     }
     
     console.log('GET /api/chatbots/:id - Success:', chatbot._id);
+    setCorsHeaders(req, res);
     res.json(chatbot);
   } catch (error) {
     console.error('GET /api/chatbots/:id - Error:', error);
@@ -89,20 +102,25 @@ router.get('/:id', async (req, res) => {
     if (error.name === 'MongoServerSelectionError' || 
         error.message?.includes('buffering timed out') ||
         error.message?.includes('connection timed out')) {
-      return res.status(503).json({ 
+      return sendResponse(req, res, 503, { 
         error: 'Database connection timeout', 
         message: 'Unable to connect to database. Please try again in a moment.',
-        retry: true
+        retry: true,
+        code: 'DB_TIMEOUT'
       });
     }
     
     // Handle invalid ObjectId errors
     if (error.name === 'CastError') {
-      return res.status(400).json({ error: 'Invalid chatbot ID format' });
+      return sendResponse(req, res, 400, { 
+        error: 'Invalid chatbot ID format',
+        code: 'INVALID_ID'
+      });
     }
     
-    res.status(500).json({ 
+    sendResponse(req, res, 500, { 
       error: error.message || 'Failed to fetch chatbot',
+      code: 'FETCH_ERROR',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
@@ -121,6 +139,7 @@ router.post('/', async (req, res) => {
     const savedChatbot = await chatbot.save();
     
     console.log('Chatbot saved successfully:', savedChatbot._id);
+    setCorsHeaders(req, res);
     res.status(201).json(savedChatbot);
   } catch (error) {
     console.error('Error creating chatbot:', error);
@@ -131,25 +150,28 @@ router.post('/', async (req, res) => {
       error.message.includes('connection timed out') ||
       error.name === 'MongoServerSelectionError'
     )) {
-      return res.status(503).json({ 
+      return sendResponse(req, res, 503, { 
         error: 'Database connection timeout', 
         message: 'Unable to connect to database. Please try again in a moment.',
-        retry: true
+        retry: true,
+        code: 'DB_TIMEOUT'
       });
     }
     
     // Handle validation errors
     if (error.name === 'ValidationError') {
-      return res.status(400).json({ 
+      return sendResponse(req, res, 400, { 
         error: 'Validation Error', 
         message: error.message,
+        code: 'VALIDATION_ERROR',
         details: error.errors 
       });
     }
     
     // Generic error
-    res.status(500).json({ 
+    sendResponse(req, res, 500, { 
       error: error.message || 'Failed to create chatbot',
+      code: 'CREATE_ERROR',
       details: error.errors 
     });
   }
@@ -167,11 +189,18 @@ router.put('/:id', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!chatbot) {
-      return res.status(404).json({ error: 'Chatbot not found' });
+      return sendResponse(req, res, 404, { 
+        error: 'Chatbot not found',
+        code: 'NOT_FOUND'
+      });
     }
+    setCorsHeaders(req, res);
     res.json(chatbot);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    sendResponse(req, res, 400, { 
+      error: error.message || 'Failed to update chatbot',
+      code: 'UPDATE_ERROR'
+    });
   }
 });
 
@@ -183,11 +212,18 @@ router.delete('/:id', async (req, res) => {
     
     const chatbot = await Chatbot.findByIdAndDelete(req.params.id);
     if (!chatbot) {
-      return res.status(404).json({ error: 'Chatbot not found' });
+      return sendResponse(req, res, 404, { 
+        error: 'Chatbot not found',
+        code: 'NOT_FOUND'
+      });
     }
+    setCorsHeaders(req, res);
     res.json({ message: 'Chatbot deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendResponse(req, res, 500, { 
+      error: error.message || 'Failed to delete chatbot',
+      code: 'DELETE_ERROR'
+    });
   }
 });
 

@@ -38,25 +38,8 @@ if (process.env.CORS_ORIGIN) {
   allowedOrigins = [...new Set(allowedOrigins)];
 }
 
-// Helper function to set CORS headers
-const setCorsHeaders = (req, res) => {
-  const origin = req.headers.origin;
-  
-  // ALWAYS set CORS headers - allow all origins for cross-origin requests
-  if (origin) {
-    // Set the origin header to match the request origin
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else {
-    // No origin - allow all
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  
-  // Set other CORS headers
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length');
-};
+// Import CORS helper
+import { setCorsHeaders } from './utils/cors.js';
 
 // Set CORS headers FIRST - before any other middleware
 // This ensures headers are ALWAYS set for ALL requests
@@ -232,8 +215,8 @@ mongoose.connection.on('reconnected', () => {
   console.log('MongoDB reconnected');
 });
 
-// Export ensureConnection and setCorsHeaders for use in routes
-export { ensureConnection, setCorsHeaders };
+// Export ensureConnection for use in routes
+export { ensureConnection };
 
 // Routes
 app.use('/api/chatbots', chatbotRoutes);

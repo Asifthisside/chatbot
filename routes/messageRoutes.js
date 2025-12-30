@@ -3,8 +3,15 @@ import mongoose from 'mongoose';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
 import Chatbot from '../models/Chatbot.js';
+import { setCorsHeaders } from '../utils/cors.js';
 
 const router = express.Router();
+
+// Helper to send response with CORS headers
+const sendResponse = (req, res, statusCode, data) => {
+  setCorsHeaders(req, res);
+  return res.status(statusCode).json(data);
+};
 
 // Helper to ensure connection before database operations
 const ensureDBConnection = async () => {
@@ -107,27 +114,37 @@ router.post('/send', async (req, res) => {
     // Ensure MongoDB connection before operations
     const isConnected = await ensureDBConnection();
     if (!isConnected) {
-      return res.status(503).json({ 
+      return sendResponse(req, res, 503, { 
         error: 'Database connection failed', 
-        message: 'Unable to connect to database. Please try again.' 
+        message: 'Unable to connect to database. Please try again.',
+        code: 'DB_CONNECTION_FAILED'
       });
     }
     
     const { chatbotId, text, type = 'user', deviceId: clientDeviceId } = req.body;
     
     if (!chatbotId || !text) {
-      return res.status(400).json({ error: 'Chatbot ID and message text are required' });
+      return sendResponse(req, res, 400, { 
+        error: 'Chatbot ID and message text are required',
+        code: 'MISSING_REQUIRED_FIELDS'
+      });
     }
 
     // Validate MongoDB ObjectId format
     if (!mongoose.Types.ObjectId.isValid(chatbotId)) {
-      return res.status(400).json({ error: 'Invalid chatbot ID format' });
+      return sendResponse(req, res, 400, { 
+        error: 'Invalid chatbot ID format',
+        code: 'INVALID_ID'
+      });
     }
 
     // Check if chatbot exists
     const chatbot = await Chatbot.findById(chatbotId);
     if (!chatbot) {
-      return res.status(404).json({ error: 'Chatbot not found' });
+      return sendResponse(req, res, 404, { 
+        error: 'Chatbot not found',
+        code: 'NOT_FOUND'
+      });
     }
 
     // Get device info
@@ -177,6 +194,7 @@ router.post('/send', async (req, res) => {
     });
 
     console.log('POST /api/messages/send - Success:', message._id);
+    setCorsHeaders(req, res);
     res.json({
       success: true,
       message: message,
@@ -193,29 +211,35 @@ router.post('/send', async (req, res) => {
     if (error.name === 'MongoServerSelectionError' || 
         error.message?.includes('buffering timed out') ||
         error.message?.includes('connection timed out')) {
-      return res.status(503).json({ 
+      return sendResponse(req, res, 503, { 
         error: 'Database connection timeout', 
         message: 'Unable to connect to database. Please try again in a moment.',
-        retry: true
+        retry: true,
+        code: 'DB_TIMEOUT'
       });
     }
     
     // Handle validation errors
     if (error.name === 'ValidationError') {
-      return res.status(400).json({ 
+      return sendResponse(req, res, 400, { 
         error: 'Validation Error', 
         message: error.message,
+        code: 'VALIDATION_ERROR',
         details: error.errors 
       });
     }
     
     // Handle cast errors
     if (error.name === 'CastError') {
-      return res.status(400).json({ error: 'Invalid ID format' });
+      return sendResponse(req, res, 400, { 
+        error: 'Invalid ID format',
+        code: 'INVALID_ID'
+      });
     }
     
-    res.status(500).json({ 
+    sendResponse(req, res, 500, { 
       error: error.message || 'Failed to send message',
+      code: 'SEND_ERROR',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
@@ -233,6 +257,7 @@ router.get('/stats', async (req, res) => {
     // Get unique users by device ID
     const uniqueUsers = await User.distinct('deviceId');
     
+    setCorsHeaders(req, res);
     res.json({
       totalUsers: uniqueUsers.length,
       totalMessages,
@@ -240,7 +265,10 @@ router.get('/stats', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting stats:', error);
-    res.status(500).json({ error: error.message });
+    sendResponse(req, res, 500, { 
+      error: error.message || 'Failed to get stats',
+      code: 'STATS_ERROR'
+    });
   }
 });
 
@@ -254,10 +282,14 @@ router.get('/users/:chatbotId', async (req, res) => {
       .sort({ lastSeen: -1 })
       .limit(100);
     
+    setCorsHeaders(req, res);
     res.json(users);
   } catch (error) {
     console.error('Error getting users:', error);
-    res.status(500).json({ error: error.message });
+    sendResponse(req, res, 500, { 
+      error: error.message || 'Failed to get users',
+      code: 'USERS_ERROR'
+    });
   }
 });
 
@@ -272,10 +304,14 @@ router.get('/chatbot/:chatbotId', async (req, res) => {
       .sort({ timestamp: -1 })
       .limit(100);
     
+    setCorsHeaders(req, res);
     res.json(messages);
   } catch (error) {
     console.error('Error getting messages:', error);
-    res.status(500).json({ error: error.message });
+    sendResponse(req, res, 500, { 
+      error: error.message || 'Failed to get messages',
+      code: 'MESSAGES_ERROR'
+    });
   }
 });
 
