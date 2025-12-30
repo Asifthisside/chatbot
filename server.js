@@ -38,30 +38,50 @@ if (process.env.CORS_ORIGIN) {
   allowedOrigins = [...new Set(allowedOrigins)];
 }
 
-// Set CORS headers FIRST - before any other middleware
-// This ensures headers are ALWAYS set for ALL requests
-app.use((req, res, next) => {
+// Helper function to set CORS headers
+const setCorsHeaders = (req, res) => {
   const origin = req.headers.origin;
   
-  // ALWAYS set CORS headers - allow all origins for now
+  // ALWAYS set CORS headers - allow all origins for cross-origin requests
   if (origin) {
     // Set the origin header to match the request origin
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
     // No origin - allow all
-    res.header('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   
   // Set other CORS headers
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  res.header('Access-Control-Expose-Headers', 'Content-Length');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length');
+};
+
+// Set CORS headers FIRST - before any other middleware
+// This ensures headers are ALWAYS set for ALL requests
+app.use((req, res, next) => {
+  // Set CORS headers
+  setCorsHeaders(req, res);
   
   // Handle OPTIONS preflight requests immediately
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+  
+  // Override res.json and res.status to ensure CORS headers are always set
+  const originalJson = res.json.bind(res);
+  const originalStatus = res.status.bind(res);
+  
+  res.json = function(body) {
+    setCorsHeaders(req, res);
+    return originalJson(body);
+  };
+  
+  res.status = function(code) {
+    setCorsHeaders(req, res);
+    return originalStatus(code);
+  };
   
   next();
 });
@@ -212,8 +232,8 @@ mongoose.connection.on('reconnected', () => {
   console.log('MongoDB reconnected');
 });
 
-// Export ensureConnection for use in routes
-export { ensureConnection };
+// Export ensureConnection and setCorsHeaders for use in routes
+export { ensureConnection, setCorsHeaders };
 
 // Routes
 app.use('/api/chatbots', chatbotRoutes);
@@ -287,24 +307,7 @@ app.use((req, res, next) => {
 // Global error handling middleware (must be last)
 app.use((err, req, res, next) => {
   // ALWAYS set CORS headers for errors (critical for CORS to work)
-  const origin = req.headers.origin;
-  
-  // Set headers regardless of whether they're already set
-  if (origin && (allowedOrigins.includes(origin) || origin.includes('chatbot-backend-seven-sage.vercel.app'))) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  } else if (origin) {
-    // Even if not in allowed list, set header to allow the request
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  } else {
-    // No origin - allow all
-    res.header('Access-Control-Allow-Origin', '*');
-  }
+  setCorsHeaders(req, res);
   
   // Log error details
   console.error('Global Error Handler:', {
