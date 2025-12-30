@@ -19,9 +19,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware - CORS Configuration
-// Default allowed origins (frontend URL)
+// Simplified CORS that ALWAYS sets headers for frontend
+const frontendOrigin = 'https://chatbot-backend-seven-sage.vercel.app';
 const defaultAllowedOrigins = [
-  'https://chatbot-backend-seven-sage.vercel.app',
+  frontendOrigin,
   'http://localhost:3000',
   'http://localhost:5173' // Vite default port
 ];
@@ -37,71 +38,67 @@ if (process.env.CORS_ORIGIN) {
   allowedOrigins = [...new Set(allowedOrigins)];
 }
 
+// Set CORS headers FIRST - before any other middleware
+// This ensures headers are ALWAYS set for ALL requests
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // ALWAYS set CORS headers - allow all origins for now
+  if (origin) {
+    // Set the origin header to match the request origin
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else {
+    // No origin - allow all
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
+  // Set other CORS headers
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.header('Access-Control-Expose-Headers', 'Content-Length');
+  
+  // Handle OPTIONS preflight requests immediately
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
+// Apply CORS middleware as additional layer
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+    // Allow requests with no origin
     if (!origin) {
       return callback(null, true);
     }
     
     // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin) || origin.includes('chatbot-backend-seven-sage.vercel.app')) {
       callback(null, true);
     } else {
-      // Log for debugging
-      console.log('CORS: Origin not in allowed list:', origin);
+      // Log but allow for debugging
+      console.log('CORS: Origin requested:', origin);
       console.log('CORS: Allowed origins:', allowedOrigins);
-      // Allow for now (can be changed to reject for security)
-      callback(null, true);
+      callback(null, true); // Allow for now
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Content-Length'],
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+  optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware (handles OPTIONS automatically)
-// Wrap in try-catch to handle any CORS configuration errors
+// Apply CORS middleware
 try {
   app.use(cors(corsOptions));
-  console.log('CORS configured with allowed origins:', allowedOrigins);
+  console.log('CORS middleware applied. Allowed origins:', allowedOrigins);
 } catch (corsError) {
-  console.error('CORS configuration error:', corsError);
-  // Fallback to permissive CORS if configuration fails
-  app.use(cors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
-  }));
+  console.error('CORS middleware error:', corsError);
+  // Headers already set above, so continue
 }
-
-// Explicitly handle OPTIONS preflight requests for all routes
-app.options('*', cors(corsOptions));
-
-// Add CORS headers manually as fallback (ensures headers are always set for frontend)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Always set CORS headers for frontend origin or if origin is in allowed list
-  if (origin && (allowedOrigins.includes(origin) || origin.includes('chatbot-backend-seven-sage.vercel.app'))) {
-    // Set headers if not already set by cors middleware
-    if (!res.getHeader('Access-Control-Allow-Origin')) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-    }
-  } else if (!origin) {
-    // Allow requests with no origin (server-to-server, Postman, etc.)
-    if (!res.getHeader('Access-Control-Allow-Origin')) {
-      res.header('Access-Control-Allow-Origin', '*');
-    }
-  }
-  next();
-});
 
 app.use(cookieParser());
 app.use(express.json());
@@ -289,20 +286,24 @@ app.use((req, res, next) => {
 
 // Global error handling middleware (must be last)
 app.use((err, req, res, next) => {
-  // Set CORS headers even for errors (critical for CORS to work)
+  // ALWAYS set CORS headers for errors (critical for CORS to work)
   const origin = req.headers.origin;
+  
+  // Set headers regardless of whether they're already set
   if (origin && (allowedOrigins.includes(origin) || origin.includes('chatbot-backend-seven-sage.vercel.app'))) {
-    if (!res.getHeader('Access-Control-Allow-Origin')) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-    }
-  } else if (!origin) {
-    // Allow requests with no origin
-    if (!res.getHeader('Access-Control-Allow-Origin')) {
-      res.header('Access-Control-Allow-Origin', '*');
-    }
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  } else if (origin) {
+    // Even if not in allowed list, set header to allow the request
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  } else {
+    // No origin - allow all
+    res.header('Access-Control-Allow-Origin', '*');
   }
   
   // Log error details
