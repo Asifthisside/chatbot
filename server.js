@@ -28,12 +28,33 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB connected successfully'))
-.catch((err) => console.error('MongoDB connection error:', err));
+const connectDB = async () => {
+  try {
+    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
+    await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('MongoDB connected successfully');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    // Don't exit in Vercel/serverless environment
+    if (process.env.VERCEL !== '1') {
+      process.exit(1);
+    }
+  }
+};
+
+connectDB();
+
+// Handle MongoDB connection events
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+});
 
 // Routes
 app.use('/api/chatbots', chatbotRoutes);
@@ -65,7 +86,7 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end(); // No Content - standard response for favicon
 });
 
-// Handle non-API routes gracefully (must be last)
+// Handle non-API routes gracefully (must be last before error handler)
 app.use((req, res, next) => {
   // Skip if it's an API route (should have been handled already)
   if (req.path.startsWith('/api')) {
@@ -83,6 +104,42 @@ app.use((req, res, next) => {
       'POST /api/messages',
       'POST /api/upload'
     ]
+  });
+});
+
+// Global error handling middleware (must be last)
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  
+  // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({ 
+      error: 'Validation Error', 
+      message: err.message,
+      details: err.errors 
+    });
+  }
+  
+  // Mongoose cast error (invalid ID)
+  if (err.name === 'CastError') {
+    return res.status(400).json({ 
+      error: 'Invalid ID format', 
+      message: 'The provided ID is not valid' 
+    });
+  }
+  
+  // MongoDB duplicate key error
+  if (err.code === 11000) {
+    return res.status(400).json({ 
+      error: 'Duplicate Entry', 
+      message: 'A record with this value already exists' 
+    });
+  }
+  
+  // Default 500 server error
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
