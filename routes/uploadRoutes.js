@@ -15,6 +15,15 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Get file upload configuration from environment variables
+const MAX_FILE_SIZE = process.env.MAX_FILE_SIZE 
+  ? parseInt(process.env.MAX_FILE_SIZE) 
+  : 5 * 1024 * 1024; // Default: 5MB
+
+const ALLOWED_FILE_TYPES = process.env.ALLOWED_FILE_TYPES
+  ? process.env.ALLOWED_FILE_TYPES.split(',').map(type => type.trim())
+  : ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp'];
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -29,17 +38,18 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+    fileSize: MAX_FILE_SIZE
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|svg/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    // Check file extension
+    const extname = /jpeg|jpg|png|gif|svg|webp/i.test(path.extname(file.originalname));
+    // Check MIME type against allowed types
+    const mimetype = ALLOWED_FILE_TYPES.includes(file.mimetype);
     
     if (extname && mimetype) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'));
+      cb(new Error(`Only these file types are allowed: ${ALLOWED_FILE_TYPES.join(', ')}`));
     }
   }
 });

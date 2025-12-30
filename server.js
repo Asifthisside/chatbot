@@ -74,23 +74,15 @@ app.use('/api/chatbots', chatbotRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/messages', messageRoutes);
 
-// Root route - Serve frontend index.html if dist exists, otherwise API info
+// Root route - Always serve frontend index.html (dist file) instead of API
 app.get('/', (req, res) => {
-  if (fs.existsSync(frontendDistPath)) {
-    res.sendFile(path.join(frontendDistPath, 'index.html'));
-  } else {
-    res.json({ 
-      message: 'Chatbot Admin API Server',
-      version: '1.0.0',
-      endpoints: {
-        health: '/api/health',
-        chatbots: '/api/chatbots',
-        messages: '/api/messages',
-        upload: '/api/upload'
-      },
-      documentation: 'This is an API server. Use /api/* endpoints.'
-    });
-  }
+  const indexPath = path.join(frontendDistPath, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      res.status(404).send('Frontend not found. Please build the frontend first.');
+    }
+  });
 });
 
 // Health check
