@@ -81,15 +81,24 @@ try {
 // Explicitly handle OPTIONS preflight requests for all routes
 app.options('*', cors(corsOptions));
 
-// Add CORS headers manually as fallback (only if not already set by cors middleware)
+// Add CORS headers manually as fallback (ensures headers are always set for frontend)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  // Only set headers if not already set and origin is allowed
-  if (origin && allowedOrigins.includes(origin) && !res.getHeader('Access-Control-Allow-Origin')) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  
+  // Always set CORS headers for frontend origin or if origin is in allowed list
+  if (origin && (allowedOrigins.includes(origin) || origin.includes('chatbot-backend-seven-sage.vercel.app'))) {
+    // Set headers if not already set by cors middleware
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    }
+  } else if (!origin) {
+    // Allow requests with no origin (server-to-server, Postman, etc.)
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
   }
   next();
 });
@@ -280,6 +289,22 @@ app.use((req, res, next) => {
 
 // Global error handling middleware (must be last)
 app.use((err, req, res, next) => {
+  // Set CORS headers even for errors (critical for CORS to work)
+  const origin = req.headers.origin;
+  if (origin && (allowedOrigins.includes(origin) || origin.includes('chatbot-backend-seven-sage.vercel.app'))) {
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    }
+  } else if (!origin) {
+    // Allow requests with no origin
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+  }
+  
   console.error('Error:', {
     message: err.message,
     stack: err.stack,
