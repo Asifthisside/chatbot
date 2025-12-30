@@ -80,14 +80,30 @@ if (fs.existsSync(frontendDistPath)) {
   console.log('Frontend static files enabled');
 }
 
-// Database connection
+// Database connection with optimized settings for serverless
 const connectDB = async () => {
   try {
+    // Check if already connected
+    if (mongoose.connection.readyState === 1) {
+      console.log('MongoDB already connected');
+      return;
+    }
+
     const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
-    await mongoose.connect(mongoURI, {
+    
+    const connectionOptions = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-    });
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+      bufferMaxEntries: 0, // Disable mongoose buffering for serverless
+      bufferCommands: false, // Disable mongoose buffering for serverless
+      maxPoolSize: 1, // Maintain up to 1 socket connection for serverless
+      minPoolSize: 1, // Maintain at least 1 socket connection
+      maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
+    };
+
+    await mongoose.connect(mongoURI, connectionOptions);
     console.log('MongoDB connected successfully');
   } catch (err) {
     console.error('MongoDB connection error:', err);
@@ -98,7 +114,23 @@ const connectDB = async () => {
   }
 };
 
+// Connect to database
 connectDB();
+
+// Helper function to ensure MongoDB connection
+const ensureConnection = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return true; // Already connected
+  }
+  
+  try {
+    await connectDB();
+    return mongoose.connection.readyState === 1;
+  } catch (error) {
+    console.error('Failed to ensure MongoDB connection:', error);
+    return false;
+  }
+};
 
 // Handle MongoDB connection events
 mongoose.connection.on('error', (err) => {
@@ -108,6 +140,17 @@ mongoose.connection.on('error', (err) => {
 mongoose.connection.on('disconnected', () => {
   console.log('MongoDB disconnected');
 });
+
+mongoose.connection.on('connected', () => {
+  console.log('MongoDB connected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB reconnected');
+});
+
+// Export ensureConnection for use in routes
+export { ensureConnection };
 
 // Routes
 app.use('/api/chatbots', chatbotRoutes);
