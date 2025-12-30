@@ -8,8 +8,22 @@ const router = express.Router();
 
 // Helper to ensure connection before database operations
 const ensureDBConnection = async () => {
-  if (mongoose.connection.readyState !== 1) {
+  try {
+    // Check if already connected
+    if (mongoose.connection.readyState === 1) {
+      return true;
+    }
+    
+    // If connecting, wait a bit
+    if (mongoose.connection.readyState === 2) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (mongoose.connection.readyState === 1) {
+        return true;
+      }
+    }
+    
     const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
+    
     await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
@@ -18,7 +32,14 @@ const ensureDBConnection = async () => {
       bufferMaxEntries: 0,
       bufferCommands: false,
       maxPoolSize: 1,
+      minPoolSize: 1,
     });
+    
+    console.log('MongoDB connection ensured in message route');
+    return mongoose.connection.readyState === 1;
+  } catch (error) {
+    console.error('Failed to ensure MongoDB connection in message route:', error);
+    throw error;
   }
 };
 
@@ -81,13 +102,26 @@ const getIpAddress = (req) => {
 // Send message
 router.post('/send', async (req, res) => {
   try {
+    console.log('POST /api/messages/send - Request received');
+    
     // Ensure MongoDB connection before operations
-    await ensureDBConnection();
+    const isConnected = await ensureDBConnection();
+    if (!isConnected) {
+      return res.status(503).json({ 
+        error: 'Database connection failed', 
+        message: 'Unable to connect to database. Please try again.' 
+      });
+    }
     
     const { chatbotId, text, type = 'user', deviceId: clientDeviceId } = req.body;
     
     if (!chatbotId || !text) {
       return res.status(400).json({ error: 'Chatbot ID and message text are required' });
+    }
+
+    // Validate MongoDB ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(chatbotId)) {
+      return res.status(400).json({ error: 'Invalid chatbot ID format' });
     }
 
     // Check if chatbot exists
@@ -142,6 +176,7 @@ router.post('/send', async (req, res) => {
       httpOnly: true 
     });
 
+    console.log('POST /api/messages/send - Success:', message._id);
     res.json({
       success: true,
       message: message,
@@ -152,8 +187,37 @@ router.post('/send', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error sending message:', error);
-    res.status(500).json({ error: error.message });
+    console.error('POST /api/messages/send - Error:', error);
+    
+    // Handle MongoDB connection errors
+    if (error.name === 'MongoServerSelectionError' || 
+        error.message?.includes('buffering timed out') ||
+        error.message?.includes('connection timed out')) {
+      return res.status(503).json({ 
+        error: 'Database connection timeout', 
+        message: 'Unable to connect to database. Please try again in a moment.',
+        retry: true
+      });
+    }
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        error: 'Validation Error', 
+        message: error.message,
+        details: error.errors 
+      });
+    }
+    
+    // Handle cast errors
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+    
+    res.status(500).json({ 
+      error: error.message || 'Failed to send message',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
