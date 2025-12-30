@@ -305,12 +305,16 @@ app.use((err, req, res, next) => {
     }
   }
   
-  console.error('Error:', {
+  // Log error details
+  console.error('Global Error Handler:', {
     message: err.message,
+    name: err.name,
     stack: err.stack,
     method: req.method,
     url: req.url,
-    origin: req.headers.origin
+    origin: req.headers.origin,
+    params: req.params,
+    query: req.query
   });
   
   // CORS error
@@ -318,6 +322,17 @@ app.use((err, req, res, next) => {
     return res.status(403).json({ 
       error: 'CORS Error', 
       message: 'Origin not allowed by CORS policy' 
+    });
+  }
+  
+  // MongoDB connection errors
+  if (err.name === 'MongoServerSelectionError' || 
+      err.message?.includes('buffering timed out') ||
+      err.message?.includes('connection timed out')) {
+    return res.status(503).json({ 
+      error: 'Database connection timeout', 
+      message: 'Unable to connect to database. Please try again in a moment.',
+      retry: true
     });
   }
   
