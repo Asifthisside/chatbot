@@ -40,6 +40,21 @@ app.use('/api/chatbots', chatbotRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/messages', messageRoutes);
 
+// Root route - API information
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Chatbot Admin API Server',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      chatbots: '/api/chatbots',
+      messages: '/api/messages',
+      upload: '/api/upload'
+    },
+    documentation: 'This is an API server. Use /api/* endpoints.'
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
@@ -56,10 +71,18 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next(); // Let API routes handle it
   }
-  // For non-API routes, return 404
+  // For non-API routes, return helpful 404
   res.status(404).json({ 
     error: 'Not Found', 
-    message: 'This is an API server. Use /api/* endpoints.' 
+    message: 'This is an API server. Use /api/* endpoints.',
+    availableEndpoints: [
+      'GET /api/health',
+      'GET /api/chatbots',
+      'POST /api/chatbots',
+      'GET /api/messages',
+      'POST /api/messages',
+      'POST /api/upload'
+    ]
   });
 });
 
