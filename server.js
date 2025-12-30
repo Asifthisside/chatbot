@@ -73,7 +73,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
+// Explicitly handle chatbot-widget.js FIRST - before static file middleware
+// Return 404 so Vercel can serve it as static file from frontend
+app.get('/chatbot-widget.js', (req, res) => {
+  // Backend doesn't serve this file - Vercel should serve it from frontend static files
+  res.status(404).end();
+});
+
 // Check and serve frontend static files
+// Note: chatbot-widget.js is handled above, so it won't reach here
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
@@ -196,6 +204,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
+
 // Handle favicon and other static file requests
 app.get('/favicon.ico', (req, res) => {
   res.status(204).end(); // No Content - standard response for favicon
@@ -204,6 +213,11 @@ app.get('/favicon.ico', (req, res) => {
 // Serve frontend React app for non-API routes (SPA routing) - must be after API routes
 if (fs.existsSync(frontendDistPath)) {
   app.get('*', (req, res, next) => {
+    // Don't handle chatbot-widget.js - let Vercel serve it as static file
+    if (req.path === '/chatbot-widget.js') {
+      return next(); // Let Vercel handle this
+    }
+    
     // Only serve frontend for non-API, non-upload routes
     if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
       res.sendFile(path.join(frontendDistPath, 'index.html'));
