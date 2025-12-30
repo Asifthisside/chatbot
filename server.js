@@ -117,14 +117,37 @@ const connectDB = async () => {
 // Connect to database
 connectDB();
 
-// Helper function to ensure MongoDB connection
-const ensureConnection = async () => {
+// Helper function to ensure MongoDB connection (exported for use in routes)
+export const ensureConnection = async () => {
+  // Check connection state: 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
   if (mongoose.connection.readyState === 1) {
     return true; // Already connected
   }
   
+  // If connecting, wait a bit
+  if (mongoose.connection.readyState === 2) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (mongoose.connection.readyState === 1) {
+      return true;
+    }
+  }
+  
   try {
-    await connectDB();
+    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
+    
+    const connectionOptions = {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      bufferMaxEntries: 0,
+      bufferCommands: false,
+      maxPoolSize: 1,
+      minPoolSize: 1,
+    };
+
+    await mongoose.connect(mongoURI, connectionOptions);
+    console.log('MongoDB connection ensured');
     return mongoose.connection.readyState === 1;
   } catch (error) {
     console.error('Failed to ensure MongoDB connection:', error);

@@ -6,9 +6,28 @@ import Chatbot from '../models/Chatbot.js';
 dotenv.config();
 const router = express.Router();
 
+// Helper to ensure connection before database operations
+const ensureDBConnection = async () => {
+  if (mongoose.connection.readyState !== 1) {
+    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
+    await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      bufferMaxEntries: 0,
+      bufferCommands: false,
+      maxPoolSize: 1,
+    });
+  }
+};
+
 // Get all chatbots
 router.get('/', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const chatbots = await Chatbot.find().sort({ createdAt: -1 });
     res.json(chatbots);
   } catch (error) {
@@ -19,6 +38,9 @@ router.get('/', async (req, res) => {
 // Get single chatbot
 router.get('/:id', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const chatbot = await Chatbot.findById(req.params.id);
     if (!chatbot) {
       return res.status(404).json({ error: 'Chatbot not found' });
@@ -32,28 +54,8 @@ router.get('/:id', async (req, res) => {
 // Create chatbot
 router.post('/', async (req, res) => {
   try {
-    // Ensure MongoDB connection is ready (important for serverless)
-    const connectionState = mongoose.connection.readyState;
-    // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
-    
-    if (connectionState !== 1) {
-      console.log(`MongoDB connection state: ${connectionState}, attempting to connect...`);
-      const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
-      
-      // Connect with serverless-optimized settings
-      await mongoose.connect(mongoURI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 10000, // 10 seconds
-        socketTimeoutMS: 45000,
-        bufferMaxEntries: 0, // Disable buffering
-        bufferCommands: false, // Disable buffering
-        maxPoolSize: 1,
-        minPoolSize: 1,
-      });
-      
-      console.log('MongoDB reconnected successfully');
-    }
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
 
     console.log('Received chatbot data:', req.body);
     
@@ -99,6 +101,9 @@ router.post('/', async (req, res) => {
 // Update chatbot
 router.put('/:id', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const chatbot = await Chatbot.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -116,6 +121,9 @@ router.put('/:id', async (req, res) => {
 // Delete chatbot
 router.delete('/:id', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const chatbot = await Chatbot.findByIdAndDelete(req.params.id);
     if (!chatbot) {
       return res.status(404).json({ error: 'Chatbot not found' });

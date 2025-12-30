@@ -1,9 +1,26 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
 import Chatbot from '../models/Chatbot.js';
 
 const router = express.Router();
+
+// Helper to ensure connection before database operations
+const ensureDBConnection = async () => {
+  if (mongoose.connection.readyState !== 1) {
+    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://asif786minto:bunny%40123@bunny.f0vwjmk.mongodb.net/chatbot';
+    await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      bufferMaxEntries: 0,
+      bufferCommands: false,
+      maxPoolSize: 1,
+    });
+  }
+};
 
 // Helper function to detect browser and OS from user agent
 const detectBrowserAndOS = (userAgent) => {
@@ -64,6 +81,9 @@ const getIpAddress = (req) => {
 // Send message
 router.post('/send', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const { chatbotId, text, type = 'user', deviceId: clientDeviceId } = req.body;
     
     if (!chatbotId || !text) {
@@ -140,6 +160,9 @@ router.post('/send', async (req, res) => {
 // Get user stats
 router.get('/stats', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const totalUsers = await User.countDocuments();
     const totalMessages = await Message.countDocuments();
     
@@ -160,6 +183,9 @@ router.get('/stats', async (req, res) => {
 // Get users for a specific chatbot
 router.get('/users/:chatbotId', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const users = await User.find({ chatbotId: req.params.chatbotId })
       .sort({ lastSeen: -1 })
       .limit(100);
@@ -174,6 +200,9 @@ router.get('/users/:chatbotId', async (req, res) => {
 // Get messages for a specific chatbot with user details
 router.get('/chatbot/:chatbotId', async (req, res) => {
   try {
+    // Ensure MongoDB connection before operations
+    await ensureDBConnection();
+    
     const messages = await Message.find({ chatbotId: req.params.chatbotId })
       .populate('userId', 'deviceId ipAddress browser os userAgent firstSeen lastSeen messageCount')
       .sort({ timestamp: -1 })
