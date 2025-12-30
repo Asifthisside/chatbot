@@ -74,19 +74,23 @@ app.use('/api/chatbots', chatbotRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/messages', messageRoutes);
 
-// Root route - API information
+// Root route - Serve frontend index.html if dist exists, otherwise API info
 app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Chatbot Admin API Server',
-    version: '1.0.0',
-    endpoints: {
-      health: '/api/health',
-      chatbots: '/api/chatbots',
-      messages: '/api/messages',
-      upload: '/api/upload'
-    },
-    documentation: 'This is an API server. Use /api/* endpoints.'
-  });
+  if (fs.existsSync(frontendDistPath)) {
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  } else {
+    res.json({ 
+      message: 'Chatbot Admin API Server',
+      version: '1.0.0',
+      endpoints: {
+        health: '/api/health',
+        chatbots: '/api/chatbots',
+        messages: '/api/messages',
+        upload: '/api/upload'
+      },
+      documentation: 'This is an API server. Use /api/* endpoints.'
+    });
+  }
 });
 
 // Health check
