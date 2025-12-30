@@ -3,11 +3,17 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import chatbotRoutes from './routes/chatbotRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -26,6 +32,13 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
+
+// Check and serve frontend static files
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  console.log('Frontend static files enabled');
+}
 
 // Database connection
 const connectDB = async () => {
@@ -86,25 +99,41 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end(); // No Content - standard response for favicon
 });
 
-// Handle non-API routes gracefully (must be last before error handler)
+// Serve frontend React app for non-API routes (SPA routing) - must be after API routes
+if (fs.existsSync(frontendDistPath)) {
+  app.get('*', (req, res, next) => {
+    // Only serve frontend for non-API, non-upload routes
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(frontendDistPath, 'index.html'));
+    } else {
+      next();
+    }
+  });
+}
+
+// Handle non-API routes gracefully (only if frontend dist doesn't exist)
 app.use((req, res, next) => {
   // Skip if it's an API route (should have been handled already)
   if (req.path.startsWith('/api')) {
     return next(); // Let API routes handle it
   }
-  // For non-API routes, return helpful 404
-  res.status(404).json({ 
-    error: 'Not Found', 
-    message: 'This is an API server. Use /api/* endpoints.',
-    availableEndpoints: [
-      'GET /api/health',
-      'GET /api/chatbots',
-      'POST /api/chatbots',
-      'GET /api/messages',
-      'POST /api/messages',
-      'POST /api/upload'
-    ]
-  });
+  // For non-API routes, return helpful 404 (only if frontend not being served)
+  if (!fs.existsSync(frontendDistPath)) {
+    res.status(404).json({ 
+      error: 'Not Found', 
+      message: 'This is an API server. Use /api/* endpoints.',
+      availableEndpoints: [
+        'GET /api/health',
+        'GET /api/chatbots',
+        'POST /api/chatbots',
+        'GET /api/messages',
+        'POST /api/messages',
+        'POST /api/upload'
+      ]
+    });
+  } else {
+    next();
+  }
 });
 
 // Global error handling middleware (must be last)
