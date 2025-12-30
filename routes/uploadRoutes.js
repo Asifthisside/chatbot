@@ -68,7 +68,7 @@ router.post('/icon', upload.single('icon'), (req, res) => {
       filename: req.file.filename 
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({  error: error.message });
   }
 });
 
