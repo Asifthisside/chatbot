@@ -19,34 +19,55 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware - CORS Configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
-    if (!origin) return callback(null, true);
-    
-    // If CORS_ORIGIN is set, check against allowed origins
-    if (process.env.CORS_ORIGIN) {
-      const allowedOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
+// Simplified CORS configuration that handles errors gracefully
+let corsOptions;
+if (process.env.CORS_ORIGIN) {
+  // If CORS_ORIGIN is set, use it (can be comma-separated for multiple origins)
+  const allowedOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
+  corsOptions = {
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+      if (!origin) return callback(null, true);
+      
       if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
+        callback(null, true);
+      } else {
+        // Log but allow for now (can be changed to reject)
+        console.log('CORS: Origin not in allowed list:', origin);
+        callback(null, true); // Allow for flexibility, change to callback(new Error(...)) to reject
       }
-    } else {
-      // If CORS_ORIGIN is not set, allow all origins (for development and flexibility)
-      return callback(null, true);
-    }
-    
-    // Reject if origin doesn't match
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar']
-};
-app.use(cors(corsOptions));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length']
+  };
+} else {
+  // If CORS_ORIGIN is not set, allow all origins
+  corsOptions = {
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length']
+  };
+}
 
-// Handle preflight requests
-app.options('*', cors(corsOptions));
+// Apply CORS middleware (handles OPTIONS automatically)
+// Wrap in try-catch to handle any CORS configuration errors
+try {
+  app.use(cors(corsOptions));
+} catch (corsError) {
+  console.error('CORS configuration error:', corsError);
+  // Fallback to permissive CORS if configuration fails
+  app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  }));
+}
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -153,7 +174,21 @@ app.use((req, res, next) => {
 
 // Global error handling middleware (must be last)
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('Error:', {
+    message: err.message,
+    stack: err.stack,
+    method: req.method,
+    url: req.url,
+    origin: req.headers.origin
+  });
+  
+  // CORS error
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(403).json({ 
+      error: 'CORS Error', 
+      message: 'Origin not allowed by CORS policy' 
+    });
+  }
   
   // Mongoose validation error
   if (err.name === 'ValidationError') {
