@@ -19,44 +19,54 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware - CORS Configuration
-// Simplified CORS configuration that handles errors gracefully
-let corsOptions;
+// Default allowed origins (frontend URL)
+const defaultAllowedOrigins = [
+  'https://chatbot-backend-seven-sage.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173' // Vite default port
+];
+
+// Get allowed origins from environment or use defaults
+let allowedOrigins = defaultAllowedOrigins;
 if (process.env.CORS_ORIGIN) {
-  // If CORS_ORIGIN is set, use it (can be comma-separated for multiple origins)
-  const allowedOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
-  corsOptions = {
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
-      if (!origin) return callback(null, true);
-      
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        // Log but allow for now (can be changed to reject)
-        console.log('CORS: Origin not in allowed list:', origin);
-        callback(null, true); // Allow for flexibility, change to callback(new Error(...)) to reject
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Length']
-  };
-} else {
-  // If CORS_ORIGIN is not set, allow all origins
-  corsOptions = {
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Length']
-  };
+  allowedOrigins = [
+    ...process.env.CORS_ORIGIN.split(',').map(o => o.trim()),
+    ...defaultAllowedOrigins
+  ];
+  // Remove duplicates
+  allowedOrigins = [...new Set(allowedOrigins)];
 }
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Log for debugging
+      console.log('CORS: Origin not in allowed list:', origin);
+      console.log('CORS: Allowed origins:', allowedOrigins);
+      // Allow for now (can be changed to reject for security)
+      callback(null, true);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+};
 
 // Apply CORS middleware (handles OPTIONS automatically)
 // Wrap in try-catch to handle any CORS configuration errors
 try {
   app.use(cors(corsOptions));
+  console.log('CORS configured with allowed origins:', allowedOrigins);
 } catch (corsError) {
   console.error('CORS configuration error:', corsError);
   // Fallback to permissive CORS if configuration fails
@@ -64,9 +74,25 @@ try {
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
   }));
 }
+
+// Explicitly handle OPTIONS preflight requests for all routes
+app.options('*', cors(corsOptions));
+
+// Add CORS headers manually as fallback (only if not already set by cors middleware)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  // Only set headers if not already set and origin is allowed
+  if (origin && allowedOrigins.includes(origin) && !res.getHeader('Access-Control-Allow-Origin')) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  }
+  next();
+});
 
 app.use(cookieParser());
 app.use(express.json());
