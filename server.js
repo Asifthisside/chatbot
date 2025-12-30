@@ -45,6 +45,24 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
+// Handle favicon and other static file requests
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end(); // No Content - standard response for favicon
+});
+
+// Handle non-API routes gracefully (must be last)
+app.use((req, res, next) => {
+  // Skip if it's an API route (should have been handled already)
+  if (req.path.startsWith('/api')) {
+    return next(); // Let API routes handle it
+  }
+  // For non-API routes, return 404
+  res.status(404).json({ 
+    error: 'Not Found', 
+    message: 'This is an API server. Use /api/* endpoints.' 
+  });
+});
+
 // Export for Vercel serverless functions
 export default app;
 
