@@ -16,7 +16,6 @@ has been blocked by CORS policy
 ```
 
 ### Solution 1: Set CORS_ORIGIN Environment Variable (Recommended)
-
 **In Vercel Backend Project** → Settings → Environment Variables:
 
 Add:
